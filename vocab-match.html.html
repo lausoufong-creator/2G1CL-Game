@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>词汇配对</title>
+<style>
+:root{--ink:#1E2A4A;--bg:#F1F4FA;--panel:#FFFFFF;--accent:#4B54C8;--ok:#1F8A5B;--okbg:#DDF3E8;--bad:#C8443B;--line:#D5DBEA;--muted:#5D6785}
+@media (prefers-color-scheme:dark){:root{--ink:#E8ECFA;--bg:#12172B;--panel:#1C2340;--accent:#9AA2FF;--ok:#5FD39A;--okbg:#1B3D32;--bad:#FF8A80;--line:#2F3960;--muted:#A3ACCB}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif}
+body{padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom));min-height:100vh}
+main{max-width:760px;margin:0 auto}
+h1{font-size:24px;margin:4px 0 4px}
+.sub{margin:0 0 14px;color:var(--muted);font-size:15px}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:15px;color:var(--muted);min-height:34px}
+#timer{font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink)}
+#msg{font-weight:700;font-size:17px;opacity:0;transition:opacity .2s}
+#msg.show{opacity:1}#msg.bad{color:var(--bad)}#msg.good{color:var(--ok)}
+.board{display:grid;grid-template-columns:minmax(120px,.8fr) 1.4fr;gap:14px}
+.col{display:flex;flex-direction:column;gap:10px}
+.slot{position:relative;min-height:68px}
+.word{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:0 8px 0 14px;border-radius:12px;background:var(--panel);border:2px solid var(--accent);font-size:28px;font-weight:700;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;transition:transform .25s ease}
+.word.drag{transition:none;z-index:50;cursor:grabbing;box-shadow:0 10px 24px rgba(20,30,70,.3)}
+.word.done{visibility:hidden}
+.spk{flex:none;width:40px;height:40px;border-radius:50%;border:0;background:var(--bg);color:var(--accent);font-size:19px;cursor:pointer}
+.spk:focus-visible,.btn:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.card{min-height:68px;border-radius:12px;display:flex;flex-direction:column;justify-content:center;padding:8px 14px;background:var(--panel);border:2px dashed var(--line)}
+.card .py{font-weight:700;color:var(--accent);font-size:18px}
+.card .en{font-size:14px;color:var(--muted)}
+.card.hot{border-color:var(--accent);background:var(--bg)}
+.card.ok{border:2px solid var(--ok);background:var(--okbg)}
+.card .zh{display:none;font-size:26px;font-weight:700;color:var(--ok)}
+.card.ok .zh{display:block}
+.card.ok .py,.card.ok .en{color:var(--ink)}
+.shake{animation:sh .3s}
+@keyframes sh{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.modal{position:fixed;inset:0;background:rgba(10,14,32,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:100}
+.modal.open{display:flex}
+.sheet{background:var(--panel);border-radius:16px;padding:20px;max-width:560px;width:100%;max-height:90vh;overflow:auto}
+.sheet h2{margin:0 0 4px;font-size:22px}
+.sheet p{margin:0 0 12px;color:var(--muted);font-size:14px}
+label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
+input{width:100%;min-height:44px;padding:0 12px;border-radius:10px;border:2px solid var(--line);background:var(--bg);color:var(--ink);font-size:16px;font-family:inherit}
+.sum{font-size:16px;margin:0 0 10px;font-weight:700;color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:16px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+th{font-size:13px;color:var(--muted)}
+td.w{font-size:20px;font-weight:700}
+td.py{color:var(--accent);font-weight:600}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.btn{flex:1;min-height:46px;padding:0 14px;border-radius:10px;border:2px solid var(--accent);background:var(--accent);color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit}
+.btn.alt{background:transparent;color:var(--accent)}
+@media (prefers-color-scheme:dark){.btn{color:#12172B}.btn.alt{color:var(--accent)}}
+@media (max-width:480px){.word{font-size:24px}.card .py{font-size:16px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <h1>词汇配对</h1>
+  <p class="sub">把左边的词语拖到正确的拼音和英文意思上。</p>
+  <div class="bar"><span id="count"></span><span id="msg" role="status" aria-live="polite"></span><span id="timer">用时 00:00</span></div>
+  <div class="board"><div class="col" id="words"></div><div class="col" id="cards"></div></div>
+  <div class="row"><button class="btn alt" id="again">重新开始</button></div>
+</main>
+
+<div class="modal open" id="start">
+  <div class="sheet" role="dialog" aria-labelledby="st">
+    <h2 id="st">开始练习</h2>
+    <p>填写姓名后开始。点击“开始”后计时。</p>
+    <label for="sname">姓名</label><input id="sname" autocomplete="off">
+    <label for="sclass">班级</label><input id="sclass" autocomplete="off">
+    <div class="row"><button class="btn" id="go">开始</button></div>
+  </div>
+</div>
+
+<div class="modal" id="end">
+  <div class="sheet" role="dialog" aria-labelledby="et">
+    <h2 id="et">练习完成</h2>
+    <p class="sum" id="sum"></p>
+    <table><thead><tr><th></th><th>词语</th><th>拼音</th><th>英文意思</th><th>尝试</th></tr></thead><tbody id="tb"></tbody></table>
+    <div class="row">
+      <button class="btn" id="dlr">下载学习报告</button>
+      <button class="btn" id="dlw">下载词语库</button>
+      <button class="btn alt" id="close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* 修改这里的词语表即可换成新的单元：[词语, 拼音, 英文意思] */
+const WORDS=[
+ ["污染","wū rǎn","pollution, contamination"],
+ ["糟糕","zāo gāo","terrible, bad"],
+ ["土壤","tǔ rǎng","soil"],
+ ["感激","gǎn jī","grateful, thankful"],
+ ["人类","rén lèi","human, mankind"],
+ ["平均","píng jūn","average"],
+ ["至少","zhì shǎo","at least"]
+];
+const TOOL="词汇配对";
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+let done=0,msgTimer,tries=[],t0=0,tick=null,elapsed=0,who={name:'',cls:''};
+
+function say(t){
+  if(!('speechSynthesis' in window))return;
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';u.rate=.85;
+  const v=speechSynthesis.getVoices().find(v=>/zh[-_]CN|cmn/i.test(v.lang));
+  if(v)u.voice=v;
+  speechSynthesis.speak(u);
+}
+const fmt=ms=>{const s=Math.round(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+const fmtCn=ms=>{const s=Math.round(ms/1000);return Math.floor(s/60)+' 分 '+(s%60)+' 秒'};
+function startTimer(){clearInterval(tick);t0=Date.now();elapsed=0;$('timer').textContent='用时 00:00';tick=setInterval(()=>{$('timer').textContent='用时 '+fmt(Date.now()-t0)},500)}
+function stopTimer(){clearInterval(tick);elapsed=Date.now()-t0;$('timer').textContent='用时 '+fmt(elapsed)}
+function flash(t,cls){const m=$('msg');m.textContent=t;m.className='show '+cls;clearTimeout(msgTimer);msgTimer=setTimeout(()=>{m.className=''},1400)}
+function updateCount(){$('count').textContent='已完成 '+done+' / '+WORDS.length}
+
+function build(){
+  done=0;tries=WORDS.map(()=>({n:0,wrong:0}));updateCount();
+  $('words').innerHTML='';$('cards').innerHTML='';$('msg').className='';
+  shuffle(WORDS.map((_,i)=>i)).forEach(i=>{
+    const s=document.createElement('div');s.className='slot';
+    s.innerHTML='<div class="word" data-id="'+i+'"><span>'+WORDS[i][0]+'</span><button class="spk" aria-label="朗读 '+WORDS[i][0]+'">🔊</button></div>';
+    $('words').appendChild(s);
+  });
+  shuffle(WORDS.map((_,i)=>i)).forEach(i=>{
+    const c=document.createElement('div');c.className='card';c.dataset.id=i;
+    c.innerHTML='<div class="zh">'+WORDS[i][0]+'</div><div class="py">'+WORDS[i][1]+'</div><div class="en">'+WORDS[i][2]+'</div>';
+    $('cards').appendChild(c);
+  });
+  document.querySelectorAll('.word').forEach(setupDrag);
+}
+const cardAt=(x,y)=>document.elementsFromPoint(x,y).map(e=>e.closest&&e.closest('.card')).find(c=>c&&!c.classList.contains('ok'))||null;
+
+function setupDrag(w){
+  const id=+w.dataset.id,spk=w.querySelector('.spk');
+  spk.addEventListener('pointerdown',e=>e.stopPropagation());
+  spk.addEventListener('click',e=>{e.stopPropagation();say(WORDS[id][0])});
+  let sx,sy,hot=null,active=false;
+  w.addEventListener('pointerdown',e=>{active=true;sx=e.clientX;sy=e.clientY;w.setPointerCapture(e.pointerId);w.classList.add('drag')});
+  w.addEventListener('pointermove',e=>{
+    if(!active)return;
+    w.style.transform='translate('+(e.clientX-sx)+'px,'+(e.clientY-sy)+'px)';
+    const c=cardAt(e.clientX,e.clientY);
+    if(c!==hot){hot&&hot.classList.remove('hot');hot=c;hot&&hot.classList.add('hot')}
+  });
+  const end=e=>{
+    if(!active)return;active=false;
+    w.classList.remove('drag');hot&&hot.classList.remove('hot');hot=null;w.style.transform='';
+    const c=cardAt(e.clientX,e.clientY);
+    if(!c)return;
+    tries[id].n++;                                   /* 每次放到卡片上算一次尝试 */
+    if(+c.dataset.id===id){
+      c.classList.add('ok');w.classList.add('done');done++;updateCount();
+      if(done===WORDS.length){stopTimer();flash('很好，答对了！','good');setTimeout(openEnd,1300)}
+      else flash('答对了','good');
+    }else{
+      tries[id].wrong++;
+      c.classList.add('shake');setTimeout(()=>c.classList.remove('shake'),300);flash('再试一次','bad');
+    }
+  };
+  w.addEventListener('pointerup',end);w.addEventListener('pointercancel',end);
+}
+
+const firstTry=()=>tries.filter(t=>t.wrong===0).length;
+const totalTries=()=>tries.reduce((a,t)=>a+t.n,0);
+function openEnd(){
+  $('sum').textContent='用时 '+fmtCn(elapsed)+'　|　总尝试 '+totalTries()+' 次　|　一次答对 '+firstTry()+' / '+WORDS.length;
+  $('tb').innerHTML=WORDS.map((r,i)=>'<tr><td><button class="spk" data-i="'+i+'" aria-label="朗读 '+r[0]+'">🔊</button></td><td class="w">'+r[0]+'</td><td class="py">'+r[1]+'</td><td>'+r[2]+'</td><td>'+tries[i].n+'</td></tr>').join('');
+  $('end').classList.add('open');
+}
+$('tb').addEventListener('click',e=>{const b=e.target.closest('.spk');if(b)say(WORDS[b.dataset.i][0])});
+$('close').onclick=()=>$('end').classList.remove('open');
+$('again').onclick=()=>{build();startTimer()};
+$('go').onclick=()=>{who.name=$('sname').value.trim();who.cls=$('sclass').value.trim();$('start').classList.remove('open');startTimer()};
+
+function save(name,html){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));a.download=name;
+  document.body.appendChild(a);a.click();a.remove();
+}
+const CSS='<style>body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;max-width:680px;margin:24px auto;padding:0 16px;color:#1E2A4A}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #D5DBEA}th{font-size:13px;color:#5D6785}.w{font-size:22px;font-weight:700}.py{color:#4B54C8;font-weight:600}.s{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}.s div{background:#F1F4FA;border-radius:10px;padding:10px 16px}.s b{display:block;font-size:22px}button{width:40px;height:40px;border-radius:50%;border:0;background:#F1F4FA;font-size:18px;cursor:pointer}</style>';
+const day=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+
+$('dlr').onclick=()=>{
+  const rows=WORDS.map((r,i)=>'<tr><td class="w">'+r[0]+'</td><td class="py">'+r[1]+'</td><td>'+tries[i].n+'</td><td>'+tries[i].wrong+'</td><td>'+(tries[i].wrong===0?'一次答对':'重试后答对')+'</td></tr>').join('');
+  const data={tool:TOOL,name:who.name,class:who.cls,date:day(),seconds:Math.round(elapsed/1000),items:WORDS.map((r,i)=>({word:r[0],attempts:tries[i].n,wrong:tries[i].wrong}))};
+  save('学习报告_'+(who.name||'未填姓名')+'_'+day()+'.html','<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>学习报告</title>'+CSS+'</head><body><h1>学习报告：'+TOOL+'</h1><p>姓名：'+esc(who.name||'未填写')+'　班级：'+esc(who.cls||'未填写')+'　日期：'+day()+'</p><div class="s"><div>用时<b>'+fmtCn(elapsed)+'</b></div><div>总尝试<b>'+totalTries()+' 次</b></div><div>一次答对<b>'+firstTry()+' / '+WORDS.length+'</b></div></div><table><thead><tr><th>词语</th><th>拼音</th><th>尝试次数</th><th>答错次数</th><th>结果</th></tr></thead><tbody>'+rows+'</tbody></table><script type="application/json" id="data">'+JSON.stringify(data)+'<\/script></body></html>');
+};
+$('dlw').onclick=()=>{
+  const rows=WORDS.map(r=>'<tr><td><button data-w="'+esc(r[0])+'" onclick="say(this.dataset.w)" aria-label="朗读">🔊</button></td><td class="w">'+r[0]+'</td><td class="py">'+r[1]+'</td><td>'+r[2]+'</td></tr>').join('');
+  save('词语库_WordBank.html','<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>词语库 Word Bank</title>'+CSS+'</head><body><h1>词语库 Word Bank</h1><p>点击喇叭听发音（需要设备有中文语音）。</p><table><thead><tr><th></th><th>词语</th><th>拼音</th><th>英文意思</th></tr></thead><tbody>'+rows+'</tbody></table><script>'+say.toString()+'if("speechSynthesis" in window)speechSynthesis.getVoices();<\/script></body></html>');
+};
+if('speechSynthesis' in window)speechSynthesis.getVoices();
+build();
+</script>
+</body>
+</html>
